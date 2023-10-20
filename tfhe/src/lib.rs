@@ -69,3 +69,5 @@ pub mod safe_deserialization;
 pub mod conformance;
 
 pub mod named;
+
+pub mod gadget;
