@@ -1,5 +1,3 @@
-use concrete_csprng::seeders::Seeder;
-
 use crate::boolean::engine::WithThreadLocalEngine;
 use crate::core_crypto::commons::generators::DeterministicSeeder;
 use crate::core_crypto::commons::parameters::CiphertextModulus;
@@ -8,7 +6,8 @@ use crate::core_crypto::prelude::{
     allocate_and_encrypt_new_lwe_ciphertext, allocate_and_generate_new_binary_glwe_secret_key,
     allocate_and_generate_new_binary_lwe_secret_key, allocate_and_generate_new_lwe_keyswitch_key,
     convert_standard_lwe_bootstrap_key_to_fourier_mem_optimized_requirement,
-    decrypt_lwe_ciphertext, keyswitch_lwe_ciphertext, new_seeder,
+    decrypt_lwe_ciphertext, keyswitch_lwe_ciphertext, lwe_ciphertext_add_assign,
+    lwe_ciphertext_cleartext_mul, lwe_ciphertext_plaintext_add_assign, new_seeder,
     par_allocate_and_generate_new_lwe_bootstrap_key,
     par_convert_standard_lwe_bootstrap_key_to_fourier,
     programmable_bootstrap_lwe_ciphertext_mem_optimized,
@@ -19,15 +18,14 @@ use crate::core_crypto::prelude::{
 };
 use crate::gadget::ciphertext::Ciphertext;
 use crate::gadget::client_key::ClientKey;
+use crate::gadget::encoding::Encoding;
 use crate::gadget::parameters::GadgetParameters;
 use crate::gadget::server_key::ServerKey;
+use concrete_csprng::seeders::Seeder;
+use itertools::izip;
 use std::cell::RefCell;
 use std::error::Error;
 use std::thread_local;
-
-struct Encoding {
-    p: u32,
-}
 
 pub struct BuffersRef<'a> {
     pub(crate) lookup_table: GlweCiphertextMutView<'a, u32>,
@@ -43,11 +41,15 @@ struct Memory {
 }
 
 impl Memory {
-    fn as_buffers(&mut self, server_key: &ServerKey) -> BuffersRef<'_> {
+    fn as_buffers(&mut self, server_key: &ServerKey, encoding: &Encoding) -> BuffersRef<'_> {
         let num_elem_in_accumulator = server_key.bootstrapping_key.glwe_size().0
             * server_key.bootstrapping_key.polynomial_size().0;
         let num_of_elem_lwe_after_ksk = server_key.key_switching_key.output_lwe_size().0;
-        let num_of_elem_lwe_after_pbs = server_key.bootstrapping_key.output_lwe_dimension().0;
+        let num_of_elem_lwe_after_pbs = server_key
+            .bootstrapping_key
+            .output_lwe_dimension()
+            .to_lwe_size()
+            .0;
 
         let total_elem_needed =
             num_elem_in_accumulator + num_of_elem_lwe_after_ksk + num_of_elem_lwe_after_pbs;
@@ -70,8 +72,28 @@ impl Memory {
 
         // accumulator is a trivial ciphertext of test vector polynomial
         acc.get_mut_mask().as_mut().fill(0u32);
-        // set test vector to all 1s; asssume p = 2^4
-        acc.get_mut_body().as_mut().fill(1 << 28);
+
+        {
+            let p = encoding.p as usize;
+            let n = server_key.bootstrapping_key.polynomial_size().0;
+            let half_window = (n / (2 * p));
+            let encoding_acc = encoding.create_accumulator();
+
+            // handle first half of 0^th window
+            let v = ((1u64 << 32) / p as u64) * encoding_acc[0] as u64;
+            acc.get_mut_body().as_mut()[..half_window].fill(v as u32);
+
+            for i in 1..(p as usize) {
+                let v = ((1u64 << 32) / p as u64) * encoding_acc[i] as u64;
+                acc.get_mut_body().as_mut()
+                    [((i - 1) * (n / p)) + half_window..(i) * (n / p) + half_window]
+                    .fill(v as u32);
+            }
+
+            // handle second half of 0^th window
+            let v = ((1u64 << 32) / p as u64) * encoding_acc[p] as u64;
+            acc.get_mut_body().as_mut()[n - half_window..n].fill(v as u32);
+        }
 
         let (after_ks_elements, after_pbs_elements) =
             other_elements.split_at_mut(num_of_elem_lwe_after_ksk);
@@ -115,12 +137,13 @@ impl Bootstrapper {
         &mut self,
         mut ciphertext: LweCiphertextOwned<u32>,
         server_key: &ServerKey,
+        encoding: &Encoding,
     ) -> Result<Ciphertext, Box<dyn Error>> {
         let BuffersRef {
             lookup_table: accumulator,
-            mut buffer_lwe_after_pbs,
             mut buffer_lwe_after_ks,
-        } = self.memory.as_buffers(server_key);
+            mut buffer_lwe_after_pbs,
+        } = self.memory.as_buffers(server_key, encoding);
 
         let fourier_bsk = &server_key.bootstrapping_key;
 
@@ -246,10 +269,14 @@ impl GadgetEngine {
         }
     }
 
-    pub fn encrypt(&mut self, message: u32, client_key: &ClientKey) -> Ciphertext {
-        // TODO: implement encoding
-        // For now message simply insert message in top 4 bits
-        let plaintext = Plaintext((message % 16) << 28);
+    pub fn encrypt(
+        &mut self,
+        message: u32,
+        client_key: &ClientKey,
+        encoding: &Encoding,
+    ) -> Ciphertext {
+        let p = encoding.p;
+        let plaintext = Plaintext((((1u64 << 32) * message as u64) / p as u64) as u32);
 
         // default to small LWE secret
         let lwe_secret = LweSecretKey::from_container(client_key.lwe_secret_key.as_ref());
@@ -265,7 +292,7 @@ impl GadgetEngine {
         Ciphertext::Encrypted(ct)
     }
 
-    pub fn decrypt(&self, ct: &Ciphertext, client_key: &ClientKey) -> u32 {
+    pub fn decrypt(&self, ct: &Ciphertext, client_key: &ClientKey, encoding: &Encoding) -> u32 {
         match ct {
             Ciphertext::Encrypted(lwe_ct) => {
                 // default to small LWE secret
@@ -273,10 +300,11 @@ impl GadgetEngine {
 
                 let decrypted_u32 = decrypt_lwe_ciphertext(&lwe_secret, &lwe_ct);
 
-                // assume p = 2^4
-                (decrypted_u32.0 >> 28) % 16
+                let p = encoding.p;
+                // ((p * d) + (q/2)) / q; to round
+                (((decrypted_u32.0 as u64 * p as u64) + (1 << 31)) >> 32) as u32 % p
             }
-            Ciphertext::Trivial(b) => *b,
+            Ciphertext::Trivial(b) => *b as u32,
         }
     }
 
@@ -301,5 +329,73 @@ impl GadgetEngine {
             glwe_secret_key,
             parameters: parameters.clone(),
         }
+    }
+
+    pub fn bootstrap(
+        &mut self,
+        ct: Ciphertext,
+        server_key: &ServerKey,
+        encoding: &Encoding,
+    ) -> Result<Ciphertext, Box<dyn Error>> {
+        match ct {
+            Ciphertext::Encrypted(lwe_ct) => {
+                self.bootstrapper
+                    .bootstrap_keyswitch(lwe_ct, &server_key, encoding)
+            }
+            Ciphertext::Trivial(c) => Ok(Ciphertext::Trivial(c)),
+        }
+    }
+
+    pub fn evaluate_gate(
+        &mut self,
+        server_key: &ServerKey,
+        encoding: &Encoding,
+        input_ciphertexts: &[Ciphertext],
+    ) -> Result<Ciphertext, Box<dyn Error>> {
+        assert_eq!(encoding.pin_count, input_ciphertexts.len());
+
+        let mut sum_ct = LweCiphertext::new(
+            0u32,
+            server_key
+                .bootstrapping_key
+                .input_lwe_dimension()
+                .to_lwe_size(),
+            CiphertextModulus::new_native(),
+        );
+
+        // Input pins p0, p1, ..., pn starting with LSB is mapped to a truth table row
+        // as pn, ..., p1, p0 (i.e. starting with MSB). Thus, input_mappings_1 stores
+        // pin mapping in reverse order of corresponding input ciphertexts
+        izip!(
+            encoding.input_mappings_1.iter().rev(),
+            input_ciphertexts.iter()
+        )
+        .for_each(|(scalar_val, pin_ct)| {
+            match pin_ct {
+                Ciphertext::Encrypted(ct) => {
+                    // cast input ciphertext to expected encoding
+                    let mut ct_clone = ct.clone();
+                    lwe_ciphertext_cleartext_mul(&mut ct_clone, ct, Cleartext(*scalar_val));
+
+                    // add casted input ciphertext to total sum
+                    lwe_ciphertext_add_assign(&mut sum_ct, &ct_clone);
+                }
+                Ciphertext::Trivial(bool_constant) => {
+                    if *bool_constant {
+                        // cast true to expected encoding and add to total sum
+                        let plaintext_1 = Plaintext(
+                            (((1u64 << 32) * *scalar_val as u64) / encoding.p as u64) as u32,
+                        );
+                        lwe_ciphertext_plaintext_add_assign(&mut sum_ct, plaintext_1);
+                    } else {
+                        // 0
+                    }
+                }
+            }
+        });
+
+        // Ok(Ciphertext::Encrypted(sum_ct))
+
+        self.bootstrap(Ciphertext::Encrypted(sum_ct), server_key, encoding)
     }
 }

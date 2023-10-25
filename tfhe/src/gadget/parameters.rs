@@ -87,29 +87,14 @@ impl GadgetParameters {
     }
 }
 
-/// A set of cryptographic parameters for homomorphic Boolean key switching.
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct BooleanKeySwitchingParameters {
-    pub ks_base_log: DecompositionBaseLog,
-    pub ks_level: DecompositionLevelCount,
-}
-
-impl BooleanKeySwitchingParameters {
-    /// Constructs a new set of parameters for boolean circuit evaluation.
-    ///
-    /// # Warning
-    ///
-    /// Failing to fix the parameters properly would yield incorrect and insecure computation.
-    /// Unless you are a cryptographer who really knows the impact of each of those parameters,
-    /// you __must__ stick with the provided parameters (if any), which both offer correct
-    /// results with 128 bits of security.
-    pub fn new(
-        ks_base_log: DecompositionBaseLog,
-        ks_level: DecompositionLevelCount,
-    ) -> BooleanKeySwitchingParameters {
-        BooleanKeySwitchingParameters {
-            ks_level,
-            ks_base_log,
-        }
-    }
-}
+pub const DEFAULT_PARAMETERS: GadgetParameters = GadgetParameters {
+    lwe_dimension: LweDimension(768),
+    glwe_dimension: GlweDimension(1),
+    polynomial_size: PolynomialSize(2048),
+    lwe_modular_std_dev: StandardDev(0.000003725679281679651),
+    glwe_modular_std_dev: StandardDev(0.0000000000034525330484572114),
+    pbs_base_log: DecompositionBaseLog(15),
+    pbs_level: DecompositionLevelCount(2),
+    ks_base_log: DecompositionBaseLog(5),
+    ks_level: DecompositionLevelCount(3),
+};
