@@ -1,3 +1,6 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
 pub struct Encoding {
     // we actually don't use this value anywhere in rust
     pub(crate) tt_value: u128,
@@ -57,11 +60,21 @@ impl Encoding {
 
         acc
     }
+
+    pub fn tt_value(&self) -> u128 {
+        self.tt_value
+    }
+
+    pub fn p(&self) -> u32 {
+        self.p
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error;
+    use std::io::BufReader;
 
     #[test]
     fn print_accumulator() {
@@ -75,5 +88,140 @@ mod tests {
         };
         let acc = encoding.create_accumulator();
         println!("Acc: {:?}", acc);
+    }
+
+    #[test]
+    fn deserialization_works() -> Result<(), Box<dyn Error>> {
+        let json_data = r#"
+        [{
+            "input_mappings_1": [
+                1,
+                1,
+                1,
+                1,
+                5,
+                6
+            ],
+            "output_encodings_0": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15
+            ],
+            "output_encodings_1": [
+                5
+            ],
+            "p": 23,
+            "pin_count": 6,
+            "tt_value": 4
+        },{
+            "input_mappings_1": [
+                1,
+                1,
+                1,
+                1,
+                5,
+                5
+            ],
+            "output_encodings_0": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                11,
+                12,
+                13,
+                14
+            ],
+            "output_encodings_1": [
+                10
+            ],
+            "p": 23,
+            "pin_count": 6,
+            "tt_value": 8
+        },{
+            "input_mappings_1": [
+                1,
+                2,
+                2,
+                2,
+                2,
+                2
+            ],
+            "output_encodings_0": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                11
+            ],
+            "output_encodings_1": [
+                10
+            ],
+            "p": 23,
+            "pin_count": 6,
+            "tt_value": 2147483648
+        },{
+            "input_mappings_1": [
+                1,
+                2,
+                2,
+                2,
+                2,
+                9
+            ],
+            "output_encodings_0": [
+                0,
+                1,
+                2,
+                4,
+                6,
+                8,
+                11,
+                13,
+                15,
+                17
+            ],
+            "output_encodings_1": [
+                3,
+                5,
+                7,
+                9,
+                10,
+                12,
+                14,
+                16,
+                18
+            ],
+            "p": 23,
+            "pin_count": 6,
+            "tt_value": 18446744065119617026
+        }]
+        "#;
+        let encodings: Vec<Encoding> = serde_json::from_str(json_data)?;
+        Ok(())
     }
 }

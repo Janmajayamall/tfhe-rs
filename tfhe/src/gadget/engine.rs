@@ -7,7 +7,8 @@ use crate::core_crypto::prelude::{
     allocate_and_generate_new_binary_lwe_secret_key, allocate_and_generate_new_lwe_keyswitch_key,
     convert_standard_lwe_bootstrap_key_to_fourier_mem_optimized_requirement,
     decrypt_lwe_ciphertext, keyswitch_lwe_ciphertext, lwe_ciphertext_add_assign,
-    lwe_ciphertext_cleartext_mul, lwe_ciphertext_plaintext_add_assign, new_seeder,
+    lwe_ciphertext_cleartext_mul, lwe_ciphertext_cleartext_mul_assign,
+    lwe_ciphertext_plaintext_add_assign, new_seeder,
     par_allocate_and_generate_new_lwe_bootstrap_key,
     par_convert_standard_lwe_bootstrap_key_to_fourier,
     programmable_bootstrap_lwe_ciphertext_mem_optimized,
@@ -86,13 +87,13 @@ impl Memory {
             for i in 1..(p as usize) {
                 let v = ((1u64 << 32) / p as u64) * encoding_acc[i] as u64;
                 acc.get_mut_body().as_mut()
-                    [((i - 1) * (n / p)) + half_window..(i) * (n / p) + half_window]
+                    [((i - 1) * n / p) + half_window..i * n / p + half_window]
                     .fill(v as u32);
             }
 
             // handle second half of 0^th window
             let v = ((1u64 << 32) / p as u64) * encoding_acc[p] as u64;
-            acc.get_mut_body().as_mut()[n - half_window..n].fill(v as u32);
+            acc.get_mut_body().as_mut()[n - half_window..].fill(v as u32);
         }
 
         let (after_ks_elements, after_pbs_elements) =
@@ -273,10 +274,10 @@ impl GadgetEngine {
         &mut self,
         message: u32,
         client_key: &ClientKey,
-        encoding: &Encoding,
+        plaintext_modulus: u32,
     ) -> Ciphertext {
-        let p = encoding.p;
-        let plaintext = Plaintext((((1u64 << 32) * message as u64) / p as u64) as u32);
+        let plaintext =
+            Plaintext((((1u64 << 32) * message as u64) / plaintext_modulus as u64) as u32);
 
         // default to small LWE secret
         let lwe_secret = LweSecretKey::from_container(client_key.lwe_secret_key.as_ref());
@@ -292,7 +293,7 @@ impl GadgetEngine {
         Ciphertext::Encrypted(ct)
     }
 
-    pub fn decrypt(&self, ct: &Ciphertext, client_key: &ClientKey, encoding: &Encoding) -> u32 {
+    pub fn decrypt(&self, ct: &Ciphertext, client_key: &ClientKey, plaintext_modulus: u32) -> u32 {
         match ct {
             Ciphertext::Encrypted(lwe_ct) => {
                 // default to small LWE secret
@@ -300,11 +301,19 @@ impl GadgetEngine {
 
                 let decrypted_u32 = decrypt_lwe_ciphertext(&lwe_secret, &lwe_ct);
 
-                let p = encoding.p;
                 // ((p * d) + (q/2)) / q; to round
-                (((decrypted_u32.0 as u64 * p as u64) + (1 << 31)) >> 32) as u32 % p
+                //
+                // let p_over_q = plaintext_modulus as f64 / (1u64 << 32) as f64;
+                // let scaled_down_decrypted =
+                //     (decrypted_u32.0 as f64 * p_over_q).round() as u32 % plaintext_modulus;
+                // scaled_down_decrypted
+                ((((decrypted_u32.0 as u64 * plaintext_modulus as u64) + (1 << 31)) >> 32) as u32)
+                    % plaintext_modulus
             }
             Ciphertext::Trivial(b) => *b as u32,
+            _ => {
+                panic!("Ciphertext placeholder reached in gadget engine!")
+            }
         }
     }
 
@@ -343,6 +352,9 @@ impl GadgetEngine {
                     .bootstrap_keyswitch(lwe_ct, &server_key, encoding)
             }
             Ciphertext::Trivial(c) => Ok(Ciphertext::Trivial(c)),
+            _ => {
+                panic!("Ciphertext placeholder reached in gadget engine!")
+            }
         }
     }
 
@@ -350,7 +362,7 @@ impl GadgetEngine {
         &mut self,
         server_key: &ServerKey,
         encoding: &Encoding,
-        input_ciphertexts: &[Ciphertext],
+        input_ciphertexts: Vec<Ciphertext>,
     ) -> Result<Ciphertext, Box<dyn Error>> {
         assert_eq!(encoding.pin_count, input_ciphertexts.len());
 
@@ -368,20 +380,18 @@ impl GadgetEngine {
         // pin mapping in reverse order of corresponding input ciphertexts
         izip!(
             encoding.input_mappings_1.iter().rev(),
-            input_ciphertexts.iter()
+            input_ciphertexts.into_iter()
         )
         .for_each(|(scalar_val, pin_ct)| {
             match pin_ct {
-                Ciphertext::Encrypted(ct) => {
-                    // cast input ciphertext to expected encoding
-                    let mut ct_clone = ct.clone();
-                    lwe_ciphertext_cleartext_mul(&mut ct_clone, ct, Cleartext(*scalar_val));
+                Ciphertext::Encrypted(mut ct) => {
+                    lwe_ciphertext_cleartext_mul_assign(&mut ct, Cleartext(*scalar_val));
 
                     // add casted input ciphertext to total sum
-                    lwe_ciphertext_add_assign(&mut sum_ct, &ct_clone);
+                    lwe_ciphertext_add_assign(&mut sum_ct, &ct);
                 }
                 Ciphertext::Trivial(bool_constant) => {
-                    if *bool_constant {
+                    if bool_constant {
                         // cast true to expected encoding and add to total sum
                         let plaintext_1 = Plaintext(
                             (((1u64 << 32) * *scalar_val as u64) / encoding.p as u64) as u32,
@@ -390,6 +400,9 @@ impl GadgetEngine {
                     } else {
                         // 0
                     }
+                }
+                _ => {
+                    panic!("Ciphertext placeholder reached in gadget engine!")
                 }
             }
         });

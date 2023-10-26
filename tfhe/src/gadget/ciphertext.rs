@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub enum Ciphertext {
     Encrypted(LweCiphertextOwned<u32>),
     Trivial(bool),
+    Placeholder,
 }
 
 //TODO: add seeded ciphertext

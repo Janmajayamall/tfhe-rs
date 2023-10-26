@@ -49,12 +49,14 @@ impl Debug for ClientKey {
 }
 
 impl ClientKey {
-    pub fn encrypt(&self, message: u32, encoding: &Encoding) -> Ciphertext {
-        GadgetEngine::with_thread_local_mut(|engine| engine.encrypt(message, &self, encoding))
+    pub fn encrypt(&self, message: u32, plaintext_modulus: u32) -> Ciphertext {
+        GadgetEngine::with_thread_local_mut(|engine| {
+            engine.encrypt(message, &self, plaintext_modulus)
+        })
     }
 
-    pub fn decrypt(&self, ct: &Ciphertext, encoding: &Encoding) -> u32 {
-        GadgetEngine::with_thread_local_mut(|engine| engine.decrypt(ct, self, encoding))
+    pub fn decrypt(&self, ct: &Ciphertext, plaintext_modulus: u32) -> u32 {
+        GadgetEngine::with_thread_local_mut(|engine| engine.decrypt(ct, self, plaintext_modulus))
     }
 
     pub fn new(parameter_set: &GadgetParameters) -> ClientKey {

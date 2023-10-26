@@ -27,7 +27,7 @@ impl ServerKey {
 
     pub fn evaluate_gate(
         &self,
-        input_ciphertexts: &[Ciphertext],
+        input_ciphertexts: Vec<Ciphertext>,
         encoding: &Encoding,
     ) -> Result<Ciphertext, Box<dyn Error>> {
         GadgetEngine::with_thread_local_mut(|engine| {

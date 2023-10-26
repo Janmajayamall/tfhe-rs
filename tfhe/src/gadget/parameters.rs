@@ -88,13 +88,13 @@ impl GadgetParameters {
 }
 
 pub const DEFAULT_PARAMETERS: GadgetParameters = GadgetParameters {
-    lwe_dimension: LweDimension(768),
+    lwe_dimension: LweDimension(807),
     glwe_dimension: GlweDimension(1),
-    polynomial_size: PolynomialSize(2048),
-    lwe_modular_std_dev: StandardDev(0.000003725679281679651),
-    glwe_modular_std_dev: StandardDev(0.0000000000034525330484572114),
-    pbs_base_log: DecompositionBaseLog(15),
-    pbs_level: DecompositionLevelCount(2),
-    ks_base_log: DecompositionBaseLog(5),
-    ks_level: DecompositionLevelCount(3),
+    polynomial_size: PolynomialSize(4096),
+    lwe_modular_std_dev: StandardDev(0.0000021515145918907506),
+    glwe_modular_std_dev: StandardDev(0.0000000000000000002168404344971009),
+    pbs_base_log: DecompositionBaseLog(22),
+    pbs_level: DecompositionLevelCount(1),
+    ks_level: DecompositionLevelCount(5),
+    ks_base_log: DecompositionBaseLog(3),
 };
