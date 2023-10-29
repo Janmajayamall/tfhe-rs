@@ -87,14 +87,26 @@ impl GadgetParameters {
     }
 }
 
-pub const DEFAULT_PARAMETERS: GadgetParameters = GadgetParameters {
-    lwe_dimension: LweDimension(807),
-    glwe_dimension: GlweDimension(1),
-    polynomial_size: PolynomialSize(4096),
-    lwe_modular_std_dev: StandardDev(0.0000021515145918907506),
-    glwe_modular_std_dev: StandardDev(0.0000000000000000002168404344971009),
-    pbs_base_log: DecompositionBaseLog(22),
-    pbs_level: DecompositionLevelCount(1),
-    ks_level: DecompositionLevelCount(5),
+pub const PLAINTEXT_2_BITS_PARAMETERS: GadgetParameters = GadgetParameters {
+    lwe_dimension: LweDimension(641),
+    glwe_dimension: GlweDimension(5),
+    polynomial_size: PolynomialSize(256),
+    lwe_modular_std_dev: StandardDev(0.000022810107419132102),
+    glwe_modular_std_dev: StandardDev(0.00000000037411618952047216),
+    pbs_base_log: DecompositionBaseLog(2),
+    pbs_level: DecompositionLevelCount(10),
     ks_base_log: DecompositionBaseLog(3),
+    ks_level: DecompositionLevelCount(4),
+};
+
+pub const PLAINTEXT_3_BITS_PARAMETERS: GadgetParameters = GadgetParameters {
+    lwe_dimension: LweDimension(672),
+    glwe_dimension: GlweDimension(3),
+    polynomial_size: PolynomialSize(512),
+    lwe_modular_std_dev: StandardDev(0.000013071021089943935),
+    glwe_modular_std_dev: StandardDev(0.00000004990272175010415),
+    pbs_base_log: DecompositionBaseLog(4),
+    pbs_level: DecompositionLevelCount(6),
+    ks_base_log: DecompositionBaseLog(2),
+    ks_level: DecompositionLevelCount(6),
 };

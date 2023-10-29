@@ -7,15 +7,13 @@ use crate::core_crypto::prelude::{
     allocate_and_generate_new_binary_lwe_secret_key, allocate_and_generate_new_lwe_keyswitch_key,
     convert_standard_lwe_bootstrap_key_to_fourier_mem_optimized_requirement,
     decrypt_lwe_ciphertext, keyswitch_lwe_ciphertext, lwe_ciphertext_add_assign,
-    lwe_ciphertext_cleartext_mul, lwe_ciphertext_cleartext_mul_assign,
-    lwe_ciphertext_plaintext_add_assign, new_seeder,
+    lwe_ciphertext_cleartext_mul_assign, lwe_ciphertext_plaintext_add_assign, new_seeder,
     par_allocate_and_generate_new_lwe_bootstrap_key,
     par_convert_standard_lwe_bootstrap_key_to_fourier,
     programmable_bootstrap_lwe_ciphertext_mem_optimized,
     programmable_bootstrap_lwe_ciphertext_mem_optimized_requirement, ActivatedRandomGenerator,
-    ComputationBuffers, EncryptionRandomGenerator, Fft, FourierLweBootstrapKey,
-    FourierLweBootstrapKeyOwned, GlweCiphertext, LweCiphertextMutView, LweKeyswitchKeyOwned,
-    SecretRandomGenerator,
+    ComputationBuffers, EncryptionRandomGenerator, Fft, FourierLweBootstrapKey, GlweCiphertext,
+    LweCiphertextMutView, SecretRandomGenerator,
 };
 use crate::gadget::ciphertext::Ciphertext;
 use crate::gadget::client_key::ClientKey;
@@ -276,8 +274,7 @@ impl GadgetEngine {
         client_key: &ClientKey,
         plaintext_modulus: u32,
     ) -> Ciphertext {
-        let plaintext =
-            Plaintext((((1u64 << 32) * message as u64) / plaintext_modulus as u64) as u32);
+        let plaintext = Plaintext((((message as u64) << 32) / plaintext_modulus as u64) as u32);
 
         // default to small LWE secret
         let lwe_secret = LweSecretKey::from_container(client_key.lwe_secret_key.as_ref());
@@ -300,6 +297,20 @@ impl GadgetEngine {
                 let lwe_secret = LweSecretKey::from_container(client_key.lwe_secret_key.as_ref());
 
                 let decrypted_u32 = decrypt_lwe_ciphertext(&lwe_secret, &lwe_ct);
+
+                // {
+                //     // print noise
+                //     let p_over_q = plaintext_modulus as f64 / (1u64 << 32) as f64;
+                //     let scaled_down_decrypted =
+                //         (decrypted_u32.0 as f64 * p_over_q).round() as u32 % plaintext_modulus;
+
+                //     let diff = ((decrypted_u32.0 as i64)
+                //         - (((scaled_down_decrypted as u64) << 32) / plaintext_modulus as u64) as
+                //           i64)
+                //         .abs();
+
+                //     println!("Noise: {}", (diff as f64).log2())
+                // }
 
                 // ((p * d) + (q/2)) / q; to round
                 //
@@ -385,20 +396,20 @@ impl GadgetEngine {
         .for_each(|(scalar_val, pin_ct)| {
             match pin_ct {
                 Ciphertext::Encrypted(mut ct) => {
+                    // FIXME: For now assume each input ciphertext is in canonical form (i.e. either
+                    // encrypts 1 or 0)
                     lwe_ciphertext_cleartext_mul_assign(&mut ct, Cleartext(*scalar_val));
 
                     // add casted input ciphertext to total sum
                     lwe_ciphertext_add_assign(&mut sum_ct, &ct);
                 }
                 Ciphertext::Trivial(bool_constant) => {
+                    // 1
                     if bool_constant {
                         // cast true to expected encoding and add to total sum
-                        let plaintext_1 = Plaintext(
-                            (((1u64 << 32) * *scalar_val as u64) / encoding.p as u64) as u32,
-                        );
+                        let plaintext_1 =
+                            Plaintext((((*scalar_val as u64) << 32) / encoding.p as u64) as u32);
                         lwe_ciphertext_plaintext_add_assign(&mut sum_ct, plaintext_1);
-                    } else {
-                        // 0
                     }
                 }
                 _ => {

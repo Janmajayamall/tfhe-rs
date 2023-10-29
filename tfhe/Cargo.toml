@@ -84,6 +84,7 @@ shortint = ["dep:paste"]
 integer = ["shortint", "dep:paste"]
 internal-keycache = ["lazy_static", "dep:fs2", "dep:bincode", "dep:paste"]
 safe-deserialization = ["dep:bincode"]
+p-encoding = ["lazy_static"]
 
 # Experimental section
 experimental = []
