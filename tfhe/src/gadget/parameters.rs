@@ -88,15 +88,15 @@ impl GadgetParameters {
 }
 
 pub const PLAINTEXT_2_BITS_PARAMETERS: GadgetParameters = GadgetParameters {
-    lwe_dimension: LweDimension(641),
+    lwe_dimension: LweDimension(694),
     glwe_dimension: GlweDimension(5),
     polynomial_size: PolynomialSize(256),
     lwe_modular_std_dev: StandardDev(0.000022810107419132102),
     glwe_modular_std_dev: StandardDev(0.00000000037411618952047216),
-    pbs_base_log: DecompositionBaseLog(2),
-    pbs_level: DecompositionLevelCount(10),
-    ks_base_log: DecompositionBaseLog(3),
-    ks_level: DecompositionLevelCount(4),
+    pbs_base_log: DecompositionBaseLog(14),
+    pbs_level: DecompositionLevelCount(1),
+    ks_base_log: DecompositionBaseLog(4),
+    ks_level: DecompositionLevelCount(3),
 };
 
 pub const PLAINTEXT_3_BITS_PARAMETERS: GadgetParameters = GadgetParameters {

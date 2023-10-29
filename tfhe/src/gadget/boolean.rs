@@ -110,8 +110,8 @@ lazy_static! {
                 2,
                 vec![BOOLEAN_MESSAGE_FALSE; 2],
                 vec![BOOLEAN_MESSAGE_TRUE; 2],
-                vec![0],
                 vec![1, 2],
+                vec![0],
                 BOOLEAN_MESSAGE_FALSE,
                 BOOLEAN_MESSAGE_TRUE,
                 BOOLEAN_PLAINTEXT_MODULUS,
@@ -245,6 +245,8 @@ mod tests {
     use crate::gadget::gen_keys;
     use std::error::Error;
 
+    static REPEAT: usize = 1000;
+
     fn random_boolean() -> bool {
         (rand::thread_rng().gen::<u32>() % 2) != 0
     }
@@ -253,14 +255,16 @@ mod tests {
     fn test_and_gate() -> Result<(), Box<dyn Error>> {
         let (client_key, server_key) = gen_keys(&BOOLEAN_PARAMETERS);
 
-        for _ in 0..128 {
+        for _ in 0..REPEAT {
             let lhs = random_boolean();
             let rhs = random_boolean();
             let expected_out_bool = lhs && rhs;
 
             let lhs_ct = client_key.encrypt(lhs);
             let rhs_ct = client_key.encrypt(rhs);
+            // let now = std::time::Instant::now();
             let out_ct = server_key.and(&lhs_ct, &rhs_ct)?;
+            // println!("Time: {}", now.elapsed().as_millis());
             let out_bool = client_key.decrypt(&out_ct);
             assert_eq!(out_bool, expected_out_bool, "left: {lhs}, right: {rhs}");
 
@@ -281,10 +285,41 @@ mod tests {
     }
 
     #[test]
+    fn test_nand_gate() -> Result<(), Box<dyn Error>> {
+        let (client_key, server_key) = gen_keys(&BOOLEAN_PARAMETERS);
+
+        for _ in 0..REPEAT {
+            let lhs = random_boolean();
+            let rhs = random_boolean();
+            let expected_out_bool = !(lhs && rhs);
+
+            let lhs_ct = client_key.encrypt(lhs);
+            let rhs_ct = client_key.encrypt(rhs);
+            let out_ct = server_key.nand(&lhs_ct, &rhs_ct)?;
+            let out_bool = client_key.decrypt(&out_ct);
+            assert_eq!(out_bool, expected_out_bool, "left: {lhs}, right: {rhs}");
+
+            // Ciphertext lhs, Trivial rhs
+            let lhs_ct = client_key.encrypt(lhs);
+            let out_ct = server_key.nand(&lhs_ct, &Ciphertext::Trivial(rhs))?;
+            let out_bool = client_key.decrypt(&out_ct);
+            assert_eq!(out_bool, expected_out_bool, "left: {lhs}, right: {rhs}");
+
+            // Trivial lhs, Ciphertext rhs
+            let rhs_ct = client_key.encrypt(rhs);
+            let out_ct = server_key.nand(&Ciphertext::Trivial(lhs), &rhs_ct)?;
+            let out_bool = client_key.decrypt(&out_ct);
+            assert_eq!(out_bool, expected_out_bool, "left: {lhs}, right: {rhs}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
     fn test_or_gate() -> Result<(), Box<dyn Error>> {
         let (client_key, server_key) = gen_keys(&BOOLEAN_PARAMETERS);
 
-        for _ in 0..128 {
+        for _ in 0..REPEAT {
             let lhs = random_boolean();
             let rhs = random_boolean();
             let expected_out_bool = lhs || rhs;
@@ -312,6 +347,83 @@ mod tests {
     }
 
     #[test]
+    fn test_nor_gate() -> Result<(), Box<dyn Error>> {
+        let (client_key, server_key) = gen_keys(&BOOLEAN_PARAMETERS);
+
+        for _ in 0..REPEAT {
+            let lhs = random_boolean();
+            let rhs = random_boolean();
+            let expected_out_bool = !(lhs || rhs);
+
+            let lhs_ct = client_key.encrypt(lhs);
+            let rhs_ct = client_key.encrypt(rhs);
+            let out_ct = server_key.nor(&lhs_ct, &rhs_ct)?;
+            let out_bool = client_key.decrypt(&out_ct);
+            assert_eq!(out_bool, expected_out_bool, "left: {lhs}, right: {rhs}");
+
+            // Ciphertext lhs, Trivial rhs
+            let lhs_ct = client_key.encrypt(lhs);
+            let out_ct = server_key.nor(&lhs_ct, &Ciphertext::Trivial(rhs))?;
+            let out_bool = client_key.decrypt(&out_ct);
+            assert_eq!(out_bool, expected_out_bool, "left: {lhs}, right: {rhs}");
+
+            // Trivial lhs, Ciphertext rhs
+            let rhs_ct = client_key.encrypt(rhs);
+            let out_ct = server_key.nor(&Ciphertext::Trivial(lhs), &rhs_ct)?;
+            let out_bool = client_key.decrypt(&out_ct);
+            assert_eq!(out_bool, expected_out_bool, "left: {lhs}, right: {rhs}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_xor_gate() -> Result<(), Box<dyn Error>> {
+        let (client_key, server_key) = gen_keys(&BOOLEAN_PARAMETERS);
+
+        for _ in 0..REPEAT {
+            let lhs = random_boolean();
+            let rhs = random_boolean();
+            let expected_out_bool = lhs ^ rhs;
+
+            let lhs_ct = client_key.encrypt(lhs);
+            let rhs_ct = client_key.encrypt(rhs);
+            let out_ct = server_key.xor(&lhs_ct, &rhs_ct)?;
+            let out_bool = client_key.decrypt(&out_ct);
+            assert_eq!(out_bool, expected_out_bool, "left: {lhs}, right: {rhs}");
+
+            // Ciphertext lhs, Trivial rhs
+            let lhs_ct = client_key.encrypt(lhs);
+            let out_ct = server_key.xor(&lhs_ct, &Ciphertext::Trivial(rhs))?;
+            let out_bool = client_key.decrypt(&out_ct);
+            assert_eq!(out_bool, expected_out_bool, "left: {lhs}, right: {rhs}");
+
+            // Trivial lhs, Ciphertext rhs
+            let rhs_ct = client_key.encrypt(rhs);
+            let out_ct = server_key.xor(&Ciphertext::Trivial(lhs), &rhs_ct)?;
+            let out_bool = client_key.decrypt(&out_ct);
+            assert_eq!(out_bool, expected_out_bool, "left: {lhs}, right: {rhs}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_not_gate() -> Result<(), Box<dyn Error>> {
+        let (client_key, server_key) = gen_keys(&BOOLEAN_PARAMETERS);
+
+        for _ in 0..REPEAT {
+            let input = random_boolean();
+            let input_ct = client_key.encrypt(input);
+            let out_ct = server_key.not(&input_ct);
+            let out_bool = client_key.decrypt(&out_ct);
+            assert_eq!(out_bool, !input, "input: {input}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
     fn test_and_then_or_gate() -> Result<(), Box<dyn Error>> {
         let (client_key, server_key) = gen_keys(&BOOLEAN_PARAMETERS);
 
@@ -319,7 +431,7 @@ mod tests {
         // loop should suffice.
         let mut main_wire = random_boolean();
         let mut main_wire_ct = client_key.encrypt(main_wire);
-        for _ in 0..5 {
+        for _ in 0..REPEAT {
             // and
             let rhs = random_boolean();
             let rhs_ct = client_key.encrypt(rhs);
@@ -331,6 +443,39 @@ mod tests {
             let rhs_ct = client_key.encrypt(rhs);
             main_wire |= rhs;
             main_wire_ct = server_key.or(&main_wire_ct, &rhs_ct)?;
+        }
+
+        let out = client_key.decrypt(&main_wire_ct);
+        assert_eq!(out, main_wire);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_not_with_another_gate() -> Result<(), Box<dyn Error>> {
+        let (client_key, server_key) = gen_keys(&BOOLEAN_PARAMETERS);
+
+        let mut main_wire = random_boolean();
+        let mut main_wire_ct = client_key.encrypt(main_wire);
+
+        // and
+        {
+            let rhs = random_boolean();
+            let rhs_ct = client_key.encrypt(rhs);
+            main_wire &= rhs;
+            main_wire_ct = server_key.and(&main_wire_ct, &rhs_ct)?;
+        }
+
+        // not
+        main_wire = !main_wire;
+        main_wire_ct = server_key.not(&main_wire_ct);
+
+        // xor
+        {
+            let rhs = random_boolean();
+            let rhs_ct = client_key.encrypt(rhs);
+            main_wire ^= rhs;
+            main_wire_ct = server_key.xor(&main_wire_ct, &rhs_ct)?;
         }
 
         let out = client_key.decrypt(&main_wire_ct);
